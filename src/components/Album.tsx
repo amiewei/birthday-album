@@ -100,7 +100,7 @@ export default function Gallery() {
       console.log("otherImages:");
       console.log(otherImages);
 
-      const allImages = hugImages.concat(danceImages, foodImages, otherImages);
+      const allImages = otherImages.concat(hugImages, foodImages, danceImages);
       //need to categorize the photos into different sections
       setAllPhotos(allImages);
     }
@@ -142,10 +142,10 @@ export default function Gallery() {
 
   return (
     <div className="py-2">
-      <h1 className="text-2xl text-white">Hugs</h1>
+      <h1 className="text-2xl text-white">Party Pictures</h1>
       <FlagDivider />
       <PhotoAlbum
-        photos={hugPhotos}
+        photos={otherPhotos}
         layout="masonry"
         columns={(containerWidth) => {
           if (containerWidth < 400) return 2;
@@ -156,10 +156,14 @@ export default function Gallery() {
         onClick={({ index }) => setIndex(index)}
       />
 
-      <h1 className="text-2xl text-white">Dance</h1>
-      <FlagDivider />
+      {hugPhotos.length > 0 && (
+        <>
+          <h1 className="text-2xl text-white">Hugs</h1>
+          <FlagDivider />
+        </>
+      )}
       <PhotoAlbum
-        photos={dancePhotos}
+        photos={hugPhotos}
         layout="masonry"
         columns={(containerWidth) => {
           if (containerWidth < 400) return 2;
@@ -184,10 +188,15 @@ export default function Gallery() {
         onClick={({ index }) => setIndex(index)}
       />
 
-      <h1 className="text-2xl text-white">Party</h1>
-      <FlagDivider />
+      {dancePhotos.length > 0 && (
+        <>
+          <h1 className="text-2xl text-white">Dance</h1>
+          <FlagDivider />
+        </>
+      )}
+
       <PhotoAlbum
-        photos={otherPhotos}
+        photos={dancePhotos}
         layout="masonry"
         columns={(containerWidth) => {
           if (containerWidth < 400) return 2;
