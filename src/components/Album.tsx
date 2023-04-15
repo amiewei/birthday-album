@@ -174,7 +174,7 @@ export default function Gallery() {
         onClick={({ index }) => setIndex(index)}
       />
 
-      <h1 className="text-lg text-white lg:text-2xl">Food</h1>
+      <h1 className="text-lg text-white lg:text-2xl">Food & Ambiance</h1>
       <FlagDivider />
       <PhotoAlbum
         photos={foodPhotos}
