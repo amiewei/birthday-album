@@ -19,7 +19,7 @@ export default function Footer() {
         <div className="sm:flex sm:items-center sm:justify-between">
           <span className="text-sm text-gray-400 dark:text-gray-400 sm:text-center">
             <a href="#" className="block hover:underline">
-              Made With ❤️ By Amie © {currentYear}. All Rights Reserved.
+              Made With ❤️ By Amie © {currentYear}
             </a>
           </span>
           <div className="mt-4 flex space-x-6 sm:mt-0 sm:justify-center">

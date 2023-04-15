@@ -141,8 +141,8 @@ export default function Gallery() {
   }));
 
   return (
-    <div className="py-2">
-      <h1 className="text-2xl text-white">Party Pictures</h1>
+    <div className="max-w-screen-sm py-2 lg:max-w-screen-xl">
+      <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
       <FlagDivider />
       <PhotoAlbum
         photos={otherPhotos}
@@ -158,7 +158,7 @@ export default function Gallery() {
 
       {hugPhotos.length > 0 && (
         <>
-          <h1 className="text-2xl text-white">Hugs</h1>
+          <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
           <FlagDivider />
         </>
       )}
@@ -174,7 +174,7 @@ export default function Gallery() {
         onClick={({ index }) => setIndex(index)}
       />
 
-      <h1 className="text-2xl text-white">Food</h1>
+      <h1 className="text-lg text-white lg:text-2xl">Food</h1>
       <FlagDivider />
       <PhotoAlbum
         photos={foodPhotos}
@@ -190,7 +190,7 @@ export default function Gallery() {
 
       {dancePhotos.length > 0 && (
         <>
-          <h1 className="text-2xl text-white">Dance</h1>
+          <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
           <FlagDivider />
         </>
       )}

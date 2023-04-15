@@ -3,7 +3,7 @@ export const FlagDivider = () => {
     <img
       src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Flag_of_Bulgaria.svg/2560px-Flag_of_Bulgaria.svg.png"
       alt="bulgarian flag"
-      className="mb-4 h-2 w-full"
+      className="mb-4 h-2 w-[100vw] lg:w-full"
     />
   );
 };
