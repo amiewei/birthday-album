@@ -59,7 +59,7 @@ export default function Gallery() {
       console.log(photosList);
 
       const newPhotos = await Promise.all(
-        photosList.map(async (photoName: string) => {
+        photosList.slice(0, 20).map(async (photoName: string) => {
           const src = `https://storage.googleapis.com/${
             import.meta.env.VITE_GCS_BUCKET_NAME
           }/${photoName}`;
