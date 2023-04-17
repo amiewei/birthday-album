@@ -125,3 +125,4 @@ TODO.md
 *.jpg
 *.webp
 **/*copy.tsx
+**/vision-api.js

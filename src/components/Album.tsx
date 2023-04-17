@@ -184,7 +184,7 @@ export default function Gallery() {
       };
     });
 
-    setSlides(slides);
+    setSlides((prevSlides) => [...prevSlides, ...slides]);
   }, [photosList]);
 
   return (
