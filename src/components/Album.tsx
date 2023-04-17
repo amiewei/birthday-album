@@ -1,7 +1,7 @@
 //https://react-photo-album.com/examples/masonry
 
 import PhotoAlbum from "react-photo-album";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, MutableRefObject } from "react";
 // import { photos } from "../utilities/test-images";  //local testing without storage bucket
 
 import Lightbox from "yet-another-react-lightbox";
@@ -13,16 +13,21 @@ import Slideshow from "yet-another-react-lightbox/plugins/slideshow";
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/plugins/thumbnails.css";
-import { GetGCSPhotos, identifyPhotos } from "./GCSPhotos";
+import { GetGCSPhotos } from "./GCSPhotos";
 import { FlagDivider } from "../utilities/bulgarian-flag-divider";
 
 export default function Gallery() {
   const [index, setIndex] = useState(-1);
-  const [photos, setAllPhotos] = useState<Photo[]>([]);
+  const [allPhotosGCS, setAllPhotosGCS] = useState<Photo[]>([]);
   const [hugPhotos, setHugPhotos] = useState<Photo[]>([]);
   const [dancePhotos, setDancePhotos] = useState<Photo[]>([]);
   const [foodPhotos, setFoodPhotos] = useState<Photo[]>([]);
   const [otherPhotos, setOtherPhotos] = useState<Photo[]>([]);
+  const [currPage, setCurrPage] = useState(1); // storing current page number
+  const [prevPage, setPrevPage] = useState(0); // storing prev page number
+  const [photosList, setphotosList] = useState<Photo[]>([]); // storing list
+  const [wasLastList, setWasLastList] = useState(false); // setting a flag to know the last list
+  const [slides, setSlides] = useState<Photo[]>([]);
 
   interface Photo {
     src: string;
@@ -30,191 +35,314 @@ export default function Gallery() {
     height: number;
   }
 
-  // useEffect(() => {
-  //   async function fetchPhotos() {
-  //     const photosList = await GetGCSPhotos();
-  //     const newPhotos = await Promise.all(
-  //       photosList.map(async (photoName: string) => {
-  //         const img = new Image();
-  //         const src = `https://storage.googleapis.com/${
-  //           import.meta.env.VITE_GCS_BUCKET_NAME
-  //         }/${photoName}`;
-  //         img.src = src;
-  //         await img.decode();
-  //         return {
-  //           src,
-  //           width: img.width,
-  //           height: img.height,
-  //         };
-  //       })
-  //     );
-  //     setPhotos(newPhotos);
-  //   }
-  //   fetchPhotos();
-  // }, []);
-
   useEffect(() => {
-    async function fetchPhotos() {
-      const photosList = await GetGCSPhotos();
-      console.log(photosList);
+    window.addEventListener("scroll", handleScroll);
 
-      const newPhotos = await Promise.all(
-        photosList.slice(0, 20).map(async (photoName: string) => {
-          const src = `https://storage.googleapis.com/${
-            import.meta.env.VITE_GCS_BUCKET_NAME
-          }/${photoName}`;
-          const photoData = await identifyPhotos(photoName);
-          console.log(photoData);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+    };
+  }, []);
 
-          const img = new Image();
-          img.src = src;
+  function handleScroll() {
+    console.log("handleScroll function");
+    const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
+
+    // const isBottom = pageScrolledToBottom();
+    if (scrollTop + clientHeight >= scrollHeight - 100) {
+      // if (scrollTop + clientHeight >= scrollHeight - 5 && isBottom) {
+      console.log("onscroll, adding currPage");
+      setCurrPage((prevPage) => prevPage + 1);
+    }
+  }
+
+  async function fetchPhotos(gcsPhotosList: any) {
+    console.log("fetchPhotos functions. fetching a portion of photos");
+
+    const newPhotos = await Promise.all(
+      gcsPhotosList.map(async (gcsObject: any) => {
+        const src = `https://storage.googleapis.com/${
+          import.meta.env.VITE_GCS_BUCKET_NAME
+        }/${gcsObject.fileName}`;
+        // console.log(gcsObject.fileName);
+        const img = new Image();
+        img.src = src;
+        try {
           await img.decode();
+          console.log(gcsObject.fileName, img.width, img.height);
           return {
             src,
             width: img.width,
             height: img.height,
-            labels: photoData.labels,
-            isHug: photoData.isHug,
-            isDance: photoData.isDance,
-            person: photoData.person,
-            isFood: photoData.isFood,
+            labels: JSON.parse(gcsObject.labels),
+            isHug: gcsObject.isHug && gcsObject.isHug === "true" ? true : false,
+            isDance:
+              gcsObject.isDance && gcsObject.isDance === "true" ? true : false,
+            isPerson:
+              gcsObject.isPerson && gcsObject.isPerson === "true"
+                ? true
+                : false,
+            //captures if food or ambiance (no person is in it)
+            isFood:
+              gcsObject.isFood &&
+              (gcsObject.isFood === "true" || gcsObject.isPerson === "false")
+                ? true
+                : false,
           };
-        })
-      );
+        } catch (error) {
+          console.log(`Error decoding ${gcsObject.fileName}: ${error}`);
+          return null; // or handle the error in some other way
+        }
+      })
+    );
+    console.log(newPhotos);
 
-      const hugImages = newPhotos.filter((image) => image.isHug);
-      const danceImages = newPhotos.filter((image) => image.isDance);
-      const foodImages = newPhotos.filter((image) => image.isFood);
-      const otherImages = newPhotos.filter(
-        (image) => !image.isHug && !image.isDance && !image.isFood
-      );
-      setHugPhotos(hugImages);
-      setDancePhotos(danceImages);
-      setFoodPhotos(foodImages);
-      setOtherPhotos(otherImages);
+    const noNullPhotos = newPhotos.filter((image) => image !== null);
 
-      console.log("hugImages:");
-      console.log(hugImages);
-      console.log("danceImages");
-      console.log(danceImages);
-      console.log("otherImages:");
-      console.log(otherImages);
+    const hugImages = noNullPhotos.filter(
+      (image) => image && image.isHug
+    ) as Photo[];
+    const danceImages = noNullPhotos.filter(
+      (image) => image && image.isDance
+    ) as Photo[];
+    const foodImages = noNullPhotos.filter(
+      (image) => image && image.isFood
+    ) as Photo[];
+    const otherImages = noNullPhotos.filter(
+      (image) => image && !image.isHug && !image.isDance && !image.isFood
+    ) as Photo[];
 
-      const allImages = otherImages.concat(hugImages, foodImages, danceImages);
-      //need to categorize the photos into different sections
-      setAllPhotos(allImages);
+    setHugPhotos((prevPhotos) => [...prevPhotos, ...hugImages]);
+    setDancePhotos((prevPhotos) => [...prevPhotos, ...danceImages]);
+    setFoodPhotos((prevPhotos) => [...prevPhotos, ...foodImages]);
+    setOtherPhotos((prevPhotos) => [...prevPhotos, ...otherImages]);
+
+    const allImages = otherImages.concat(hugImages, foodImages, danceImages);
+    return allImages;
+  }
+
+  useEffect(() => {
+    async function loadInitialGCSPhotos() {
+      console.log("1st useEffect");
+      const photosList = await GetGCSPhotos();
+      console.log(photosList);
+      setAllPhotosGCS(photosList);
     }
-    fetchPhotos();
+    loadInitialGCSPhotos();
   }, []);
 
-  console.log(photos);
+  useEffect(() => {
+    console.log("2nd useEffect");
+    if (allPhotosGCS.length > 0) {
+      const fetchData = async () => {
+        console.log("fetching data in 2nd effect");
+        const pageSize = 10;
+        const startIndex = (currPage - 1) * pageSize;
+        const endIndex = currPage * pageSize;
+        console.log(allPhotosGCS);
+        console.log(startIndex, +", " + endIndex);
+
+        const gcsPhotosList = allPhotosGCS.slice(startIndex, endIndex);
+        console.log("gcsPhotosList: this is a portion of the list");
+        console.log(gcsPhotosList);
+        if (!gcsPhotosList.length) {
+          setWasLastList(true);
+          return;
+        }
+        setPrevPage(currPage);
+        const portionPhotosList = await fetchPhotos(gcsPhotosList);
+        setphotosList([...photosList, ...portionPhotosList]);
+      };
+      if (!wasLastList && prevPage !== currPage) {
+        console.log("will fetch data. currPage is: " + currPage);
+        fetchData();
+      }
+    }
+  }, [allPhotosGCS, currPage, wasLastList, prevPage, photosList]);
 
   const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
 
-  const photos_new = photos.map((photo: Photo) => {
-    const width = breakpoints[0];
-    const height = (photo.height / photo.width) * width;
-    return {
-      src: photo.src,
-      width,
-      height,
-      images: breakpoints.map((breakpoint) => {
-        const height = Math.round((photo.height / photo.width) * breakpoint);
+  useEffect(() => {
+    const slides = photosList.map((photo: Photo) => {
+      const { src, width, height } = photo;
+
+      const srcSet = breakpoints.map((breakpoint) => {
+        const imageWidth = Math.min(breakpoint, width);
+        const imageHeight = Math.round((height / width) * imageWidth);
+
         return {
           src: photo.src,
-          width: breakpoint,
-          height,
+          width: imageWidth,
+          height: imageHeight,
         };
-      }),
-    };
-  });
+      });
 
-  const slides = photos_new.map(({ src, width, height, images }: any) => ({
-    src,
-    width,
-    height,
-    srcSet: images.map((image: Photo) => ({
-      src: image.src,
-      width: image.width,
-      height: image.height,
-    })),
-  }));
+      return {
+        src,
+        width,
+        height,
+        srcSet,
+      };
+    });
+
+    setSlides(slides);
+  }, [photosList]);
 
   return (
     <div className="max-w-screen-sm py-2 lg:max-w-screen-xl">
-      <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
-      <FlagDivider />
-      <PhotoAlbum
-        photos={otherPhotos}
-        layout="masonry"
-        columns={(containerWidth) => {
-          if (containerWidth < 400) return 2;
-          if (containerWidth < 800) return 3;
-          return 4;
-        }}
-        targetRowHeight={300}
-        onClick={({ index }) => setIndex(index)}
-      />
-
-      {hugPhotos.length > 0 && (
+      {photosList.length === 0 ? (
+        <h1 className="text-center text-white">Loading...</h1>
+      ) : (
         <>
-          <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
+          <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
           <FlagDivider />
+          <PhotoAlbum
+            photos={otherPhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(index)}
+          />
+
+          {hugPhotos.length > 0 && (
+            <>
+              <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
+              <FlagDivider />
+            </>
+          )}
+          <PhotoAlbum
+            photos={hugPhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(index)}
+          />
+
+          <h1 className="text-lg text-white lg:text-2xl">Food & Ambiance</h1>
+          <FlagDivider />
+          <PhotoAlbum
+            photos={foodPhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(index)}
+          />
+
+          {dancePhotos.length > 0 && (
+            <>
+              <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
+              <FlagDivider />
+            </>
+          )}
+
+          <PhotoAlbum
+            photos={dancePhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(index)}
+          />
+
+          {slides.length > 0 && (
+            <Lightbox
+              slides={slides}
+              open={index >= 0}
+              index={index}
+              close={() => setIndex(-1)}
+              // enable optional lightbox plugins
+              plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
+            />
+          )}
         </>
       )}
-      <PhotoAlbum
-        photos={hugPhotos}
-        layout="masonry"
-        columns={(containerWidth) => {
-          if (containerWidth < 400) return 2;
-          if (containerWidth < 800) return 3;
-          return 4;
-        }}
-        targetRowHeight={300}
-        onClick={({ index }) => setIndex(index)}
-      />
 
-      <h1 className="text-lg text-white lg:text-2xl">Food & Ambiance</h1>
-      <FlagDivider />
-      <PhotoAlbum
-        photos={foodPhotos}
-        layout="masonry"
-        columns={(containerWidth) => {
-          if (containerWidth < 400) return 2;
-          if (containerWidth < 800) return 3;
-          return 4;
-        }}
-        targetRowHeight={300}
-        onClick={({ index }) => setIndex(index)}
-      />
-
-      {dancePhotos.length > 0 && (
-        <>
-          <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
-          <FlagDivider />
-        </>
-      )}
-
-      <PhotoAlbum
-        photos={dancePhotos}
-        layout="masonry"
-        columns={(containerWidth) => {
-          if (containerWidth < 400) return 2;
-          if (containerWidth < 800) return 3;
-          return 4;
-        }}
-        targetRowHeight={300}
-        onClick={({ index }) => setIndex(index)}
-      />
-
-      <Lightbox
-        slides={slides}
-        open={index >= 0}
-        index={index}
-        close={() => setIndex(-1)}
-        // enable optional lightbox plugins
-        plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
-      />
+      <div className="flex justify-center text-center text-white">
+        {allPhotosGCS.length > photosList.length &&
+        allPhotosGCS.length !== 0 ? (
+          <h1>Scroll Down to Load More Pictures...</h1>
+        ) : null}
+      </div>
     </div>
   );
 }
+
+// useEffect(() => {
+//   async function fetchPhotos() {
+//     const photosList = await GetGCSPhotos();
+//     console.log(photosList);
+
+//     const newPhotos = await Promise.all(
+//       photosList.slice(0, 100).map(async (photoName: string) => {
+//         const src = `https://storage.googleapis.com/${
+//           import.meta.env.VITE_GCS_BUCKET_NAME
+//         }/${photoName}`;
+//         console.log(photoName);
+//         const photoData = await identifyPhotos(photoName);
+//         console.log(photoData);
+
+//         const img = new Image();
+//         img.src = src;
+//         try {
+//           await img.decode();
+//           console.log(photoName, img.width, img.height);
+//           return {
+//             src,
+//             width: img.width,
+//             height: img.height,
+//             labels: photoData.labels,
+//             isHug: photoData.isHug,
+//             isDance: photoData.isDance,
+//             person: photoData.person,
+//             isFood: photoData.isFood,
+//           };
+//         } catch (error) {
+//           console.log(`Error decoding ${photoName}: ${error}`);
+//           return null; // or handle the error in some other way
+//         }
+//       })
+//     );
+
+//     const noNullPhotos = newPhotos.filter((image) => image !== null);
+
+//     const hugImages = noNullPhotos.filter((image) => image && image.isHug);
+//     const danceImages = noNullPhotos.filter(
+//       (image) => image && image.isDance
+//     );
+//     const foodImages = noNullPhotos.filter((image) => image && image.isFood);
+//     const otherImages = noNullPhotos.filter(
+//       (image) => !image.isHug && !image.isDance && !image.isFood
+//     );
+//     setHugPhotos(hugImages);
+//     setDancePhotos(danceImages);
+//     setFoodPhotos(foodImages);
+//     setOtherPhotos(otherImages);
+
+//     console.log("hugImages:");
+//     console.log(hugImages);
+//     console.log("danceImages");
+//     console.log(danceImages);
+//     console.log("otherImages:");
+//     console.log(otherImages);
+
+//     const allImages = otherImages.concat(hugImages, foodImages, danceImages);
+//     //need to categorize the photos into different sections
+//     setAllPhotos(allImages);
+//     // setAllPhotos(noNullPhotos);
+//   }
+//   fetchPhotos();
+// }, []);
