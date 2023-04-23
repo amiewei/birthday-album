@@ -18,7 +18,7 @@ import { FlagDivider } from "../utilities/bulgarian-flag-divider";
 
 export default function Gallery() {
   const [index, setIndex] = useState(-1);
-  const [allPhotosGCS, setAllPhotosGCS] = useState<Photo[]>([]);
+  const [portionPhotosGCS, setPortionPhotosGCS] = useState<Photo[]>([]);
   const [hugPhotos, setHugPhotos] = useState<Photo[]>([]);
   const [dancePhotos, setDancePhotos] = useState<Photo[]>([]);
   const [foodPhotos, setFoodPhotos] = useState<Photo[]>([]);
@@ -28,6 +28,7 @@ export default function Gallery() {
   const [photosList, setphotosList] = useState<Photo[]>([]); // storing list
   const [wasLastList, setWasLastList] = useState(false); // setting a flag to know the last list
   const [slides, setSlides] = useState<Photo[]>([]);
+  const [nextQuery, setNextQuery] = useState("");
 
   interface Photo {
     src: string;
@@ -55,25 +56,26 @@ export default function Gallery() {
     }
   }
 
-  async function fetchPhotos(gcsPhotosList: any) {
+  async function fetchPhotos(portionPhotosGCS: any) {
     console.log("fetchPhotos functions. fetching a portion of photos");
 
     const newPhotos = await Promise.all(
-      gcsPhotosList.map(async (gcsObject: any) => {
+      portionPhotosGCS.map(async (gcsObject: any) => {
         const src = `https://storage.googleapis.com/${
           import.meta.env.VITE_GCS_BUCKET_NAME
         }/${gcsObject.fileName}`;
         // console.log(gcsObject.fileName);
-        const img = new Image();
-        img.src = src;
         try {
-          await img.decode();
-          console.log(gcsObject.fileName, img.width, img.height);
+          console.log(
+            gcsObject.fileName,
+            gcsObject.imageWidth,
+            gcsObject.imageHeight
+          );
           return {
             src,
-            width: img.width,
-            height: img.height,
-            labels: JSON.parse(gcsObject.labels),
+            width: gcsObject.imageWidth ?? 0,
+            height: gcsObject.imageHeight ?? 0,
+            labels: gcsObject?.labels ? JSON.parse(gcsObject.labels) : [],
             isHug: gcsObject.isHug && gcsObject.isHug === "true" ? true : false,
             isDance:
               gcsObject.isDance && gcsObject.isDance === "true" ? true : false,
@@ -83,20 +85,25 @@ export default function Gallery() {
                 : false,
             //captures if food or ambiance (no person is in it)
             isFood:
-              gcsObject.isFood &&
+              (gcsObject.isFood ?? false) &&
               (gcsObject.isFood === "true" || gcsObject.isPerson === "false")
                 ? true
                 : false,
           };
         } catch (error) {
-          console.log(`Error decoding ${gcsObject.fileName}: ${error}`);
+          console.log(`Error with ${gcsObject.fileName}: ${error}`);
           return null; // or handle the error in some other way
         }
       })
     );
-    console.log(newPhotos);
 
+    console.log("newPhotos");
+    console.log(newPhotos);
     const noNullPhotos = newPhotos.filter((image) => image !== null);
+
+    const nullPhotosFilteredOut = newPhotos.filter((image) => image === null);
+    console.log("null photos filtered out");
+    console.log(nullPhotosFilteredOut);
 
     const hugImages = noNullPhotos.filter(
       (image) => image && image.isHug
@@ -120,44 +127,45 @@ export default function Gallery() {
     return allImages;
   }
 
+  // useEffect(() => {
+  //   console.log("2nd useEffect");
+  const fetchData = async (data: Photo[]) => {
+    if (portionPhotosGCS.length > 0 && !wasLastList && prevPage !== currPage) {
+      console.log("portionPhotosGCS: fetching portion");
+      console.log(data);
+      if (!data.length) {
+        setWasLastList(true);
+        return;
+      }
+      setPrevPage(currPage);
+      const portionPhotosList = await fetchPhotos(data);
+      setphotosList([...photosList, ...portionPhotosList]);
+    }
+  };
+
+  //why sometimes pages get loaded twice - same child key
+  //images above disappears when scrolling down page??
+  //upon initial load page, getGCSphotos (50 at a time and get next page token)
+  //store portionPhoto in the state
+
+  //infinite scrol with Intersection Observer API
+  //https://rajrajhans.com/2021/04/pagination-and-infinite-scroll-in-react/
+
   useEffect(() => {
     async function loadInitialGCSPhotos() {
       console.log("1st useEffect");
-      const photosList = await GetGCSPhotos();
-      console.log(photosList);
-      setAllPhotosGCS(photosList);
+      const { data, nextQueryPageToken } = await GetGCSPhotos(nextQuery);
+      console.log(data);
+      console.log(nextQueryPageToken);
+      setPortionPhotosGCS(data);
+      setNextQuery(nextQueryPageToken);
     }
     loadInitialGCSPhotos();
-  }, []);
+  }, [currPage]);
 
   useEffect(() => {
-    console.log("2nd useEffect");
-    if (allPhotosGCS.length > 0) {
-      const fetchData = async () => {
-        console.log("fetching data in 2nd effect");
-        const pageSize = 10;
-        const startIndex = (currPage - 1) * pageSize;
-        const endIndex = currPage * pageSize;
-        console.log(allPhotosGCS);
-        console.log(startIndex, +", " + endIndex);
-
-        const gcsPhotosList = allPhotosGCS.slice(startIndex, endIndex);
-        console.log("gcsPhotosList: this is a portion of the list");
-        console.log(gcsPhotosList);
-        if (!gcsPhotosList.length) {
-          setWasLastList(true);
-          return;
-        }
-        setPrevPage(currPage);
-        const portionPhotosList = await fetchPhotos(gcsPhotosList);
-        setphotosList([...photosList, ...portionPhotosList]);
-      };
-      if (!wasLastList && prevPage !== currPage) {
-        console.log("will fetch data. currPage is: " + currPage);
-        fetchData();
-      }
-    }
-  }, [allPhotosGCS, currPage, wasLastList, prevPage, photosList]);
+    fetchData(portionPhotosGCS);
+  }, [portionPhotosGCS]);
 
   const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
 
@@ -197,12 +205,12 @@ export default function Gallery() {
           <FlagDivider />
           <PhotoAlbum
             photos={otherPhotos}
-            layout="masonry"
-            columns={(containerWidth) => {
-              if (containerWidth < 400) return 2;
-              if (containerWidth < 800) return 3;
-              return 4;
-            }}
+            layout="rows"
+            // columns={(containerWidth) => {
+            //   if (containerWidth < 400) return 2;
+            //   if (containerWidth < 800) return 3;
+            //   return 4;
+            // }}
             targetRowHeight={300}
             onClick={({ index }) => setIndex(index)}
           />
@@ -272,8 +280,8 @@ export default function Gallery() {
       )}
 
       <div className="flex justify-center text-center text-white">
-        {allPhotosGCS.length > photosList.length &&
-        allPhotosGCS.length !== 0 ? (
+        {portionPhotosGCS.length > photosList.length &&
+        portionPhotosGCS.length !== 0 ? (
           <h1>Scroll Down to Load More Pictures...</h1>
         ) : null}
       </div>

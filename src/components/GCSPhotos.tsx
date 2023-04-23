@@ -16,10 +16,19 @@ export async function identifyPhotos(src: String) {
   return photoIdentification;
 }
 
-export async function GetGCSPhotos() {
-  const response = await axios.get(import.meta.env.VITE_BACKEND_GETPHOTO_URL);
+export async function GetGCSPhotos(nextQuery: "" | String) {
+  console.log(
+    `${
+      import.meta.env.VITE_BACKEND_GETPHOTO_URL
+    }?nextQueryPageToken=${nextQuery}`
+  );
+  const response = await axios.get(
+    `${
+      import.meta.env.VITE_BACKEND_GETPHOTO_URL
+    }?nextQueryPageToken=${nextQuery}`
+  );
   const photosList = response.data;
-  //   console.log(photosList);
+  console.log(photosList);
 
   return photosList;
 }
