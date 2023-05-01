@@ -1,7 +1,7 @@
 //https://react-photo-album.com/examples/masonry
 
 import PhotoAlbum from "react-photo-album";
-import { useState, useEffect, useRef, MutableRefObject } from "react";
+import React, { useState, useEffect, useRef } from "react";
 // import { photos } from "../utilities/test-images";  //local testing without storage bucket
 
 import Lightbox from "yet-another-react-lightbox";
@@ -13,68 +13,82 @@ import Slideshow from "yet-another-react-lightbox/plugins/slideshow";
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/plugins/thumbnails.css";
-import { GetGCSPhotos } from "./GCSPhotos";
+// import { GetGCSPhotos } from "./GCSPhotos";
 import { FlagDivider } from "../utilities/bulgarian-flag-divider";
+import Loading from "./Loading";
+import axios from "axios";
+import uniqid from "uniqid";
 
-export default function Gallery() {
+const maxResults = 15;
+const gcsEndpoint = `${
+  import.meta.env.VITE_BACKEND_GETPHOTO_URL
+}?maxResults=${maxResults}&nextQueryPageToken=`;
+
+const Gallery = () => {
   const [index, setIndex] = useState(-1);
-  const [portionPhotosGCS, setPortionPhotosGCS] = useState<Photo[]>([]);
   const [hugPhotos, setHugPhotos] = useState<Photo[]>([]);
   const [dancePhotos, setDancePhotos] = useState<Photo[]>([]);
   const [foodPhotos, setFoodPhotos] = useState<Photo[]>([]);
   const [otherPhotos, setOtherPhotos] = useState<Photo[]>([]);
-  const [currPage, setCurrPage] = useState(1); // storing current page number
-  const [prevPage, setPrevPage] = useState(0); // storing prev page number
-  const [photosList, setphotosList] = useState<Photo[]>([]); // storing list
-  const [wasLastList, setWasLastList] = useState(false); // setting a flag to know the last list
-  const [slides, setSlides] = useState<Photo[]>([]);
-  const [nextQuery, setNextQuery] = useState("");
+  const [photosList, setPhotosList] = useState<Photo[]>([]); // storing list
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [isFirstLoad, setIsFirstLoad] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const nextQuery = useRef(" ");
 
   interface Photo {
+    isHug?: boolean;
+    isFood?: boolean;
+    isDance?: boolean;
     src: string;
     width: number;
     height: number;
   }
 
-  useEffect(() => {
-    window.addEventListener("scroll", handleScroll);
-
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, []);
-
-  function handleScroll() {
-    console.log("handleScroll function");
-    const { scrollTop, scrollHeight, clientHeight } = document.documentElement;
-
-    // const isBottom = pageScrolledToBottom();
-    if (scrollTop + clientHeight >= scrollHeight - 100) {
-      // if (scrollTop + clientHeight >= scrollHeight - 5 && isBottom) {
-      console.log("onscroll, adding currPage");
-      setCurrPage((prevPage) => prevPage + 1);
-    }
+  interface Slide {
+    src: string;
+    width: number;
+    height: number;
+    srcSet?: any;
+    isHug?: boolean;
+    isFood?: boolean;
+    isDance?: boolean;
   }
 
-  async function fetchPhotos(portionPhotosGCS: any) {
-    console.log("fetchPhotos functions. fetching a portion of photos");
+  const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
+
+  async function updatePhotoFormat(photos: any) {
+    console.log("updatePhotoFormat");
 
     const newPhotos = await Promise.all(
-      portionPhotosGCS.map(async (gcsObject: any) => {
+      photos.map(async (gcsObject: any) => {
         const src = `https://storage.googleapis.com/${
           import.meta.env.VITE_GCS_BUCKET_NAME
         }/${gcsObject.fileName}`;
         // console.log(gcsObject.fileName);
-        try {
-          console.log(
-            gcsObject.fileName,
-            gcsObject.imageWidth,
-            gcsObject.imageHeight
+
+        //set slide srcSet
+        const srcSet = breakpoints.map((breakpoint) => {
+          const imageWidth = Math.min(breakpoint, gcsObject.imageWidth);
+          const imageHeight = Math.round(
+            (gcsObject.imageheight / gcsObject.imageWidth) * imageWidth
           );
           return {
+            src: src,
+            width: imageWidth,
+            height: imageHeight,
+          };
+        });
+        try {
+          return {
+            key: uniqid(),
             src,
-            width: gcsObject.imageWidth ?? 0,
-            height: gcsObject.imageHeight ?? 0,
+            width: gcsObject.imageWidth ? parseInt(gcsObject.imageWidth) : 4000,
+            height: gcsObject.imageHeight
+              ? parseInt(gcsObject.imageHeight)
+              : 3000,
             labels: gcsObject?.labels ? JSON.parse(gcsObject.labels) : [],
             isHug: gcsObject.isHug && gcsObject.isHug === "true" ? true : false,
             isDance:
@@ -89,6 +103,7 @@ export default function Gallery() {
               (gcsObject.isFood === "true" || gcsObject.isPerson === "false")
                 ? true
                 : false,
+            srcSet,
           };
         } catch (error) {
           console.log(`Error with ${gcsObject.fileName}: ${error}`);
@@ -100,10 +115,6 @@ export default function Gallery() {
     console.log("newPhotos");
     console.log(newPhotos);
     const noNullPhotos = newPhotos.filter((image) => image !== null);
-
-    const nullPhotosFilteredOut = newPhotos.filter((image) => image === null);
-    console.log("null photos filtered out");
-    console.log(nullPhotosFilteredOut);
 
     const hugImages = noNullPhotos.filter(
       (image) => image && image.isHug
@@ -123,234 +134,171 @@ export default function Gallery() {
     setFoodPhotos((prevPhotos) => [...prevPhotos, ...foodImages]);
     setOtherPhotos((prevPhotos) => [...prevPhotos, ...otherImages]);
 
-    const allImages = otherImages.concat(hugImages, foodImages, danceImages);
-    return allImages;
+    return noNullPhotos;
   }
 
-  // useEffect(() => {
-  //   console.log("2nd useEffect");
-  const fetchData = async (data: Photo[]) => {
-    if (portionPhotosGCS.length > 0 && !wasLastList && prevPage !== currPage) {
-      console.log("portionPhotosGCS: fetching portion");
-      console.log(data);
-      if (!data.length) {
-        setWasLastList(true);
-        return;
+  useEffect(() => {
+    console.log("use effect 1 - upon mounting");
+    fetchImages();
+    window.addEventListener("scroll", handleScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleScroll = () => {
+    console.log("handleScroll");
+    if (
+      Math.ceil(window.innerHeight + window.scrollY) >=
+      document.documentElement.offsetHeight
+    ) {
+      console.log(photosList?.length);
+      console.log("isLoading: " + isLoading);
+
+      //first time this doesnt load again. if you adjust code and save, it will run
+      if (photosList?.length < 350 && isLoading === false) {
+        // setIsLoading(true);
+        console.log("req triggered");
+        console.log("isLoading: " + isLoading);
+        console.log(nextQuery.current);
+        console.log("photolist under 350 images");
+        fetchImages();
       }
-      setPrevPage(currPage);
-      const portionPhotosList = await fetchPhotos(data);
-      setphotosList([...photosList, ...portionPhotosList]);
     }
   };
 
-  //why sometimes pages get loaded twice - same child key
-  //images above disappears when scrolling down page??
-  //upon initial load page, getGCSphotos (50 at a time and get next page token)
-  //store portionPhoto in the state
+  const fetchImages = async () => {
+    console.log("fetchImage function");
+    setIsLoading(true);
+    try {
+      const response = await axios.get(gcsEndpoint + nextQuery.current);
+      const data = response.data;
 
-  //infinite scrol with Intersection Observer API
-  //https://rajrajhans.com/2021/04/pagination-and-infinite-scroll-in-react/
+      const updatedFormatPhotos = await updatePhotoFormat(data.data);
+      //parse through metadata and assign into different buckets -- use new function
+      setPhotosList((photos) => [...photos, ...updatedFormatPhotos]);
 
-  useEffect(() => {
-    async function loadInitialGCSPhotos() {
-      console.log("1st useEffect");
-      const { data, nextQueryPageToken } = await GetGCSPhotos(nextQuery);
-      console.log(data);
-      console.log(nextQueryPageToken);
-      setPortionPhotosGCS(data);
-      setNextQuery(nextQueryPageToken);
+      setIsFirstLoad(false);
+      setIsLoading(false);
+      nextQuery.current = data.nextQueryPageToken.pageToken;
+    } catch (e: any) {
+      alert("Loading image from GCS bucket failed." + e);
+      setError(e);
     }
-    loadInitialGCSPhotos();
-  }, [currPage]);
-
-  useEffect(() => {
-    fetchData(portionPhotosGCS);
-  }, [portionPhotosGCS]);
-
-  const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
-
-  useEffect(() => {
-    const slides = photosList.map((photo: Photo) => {
-      const { src, width, height } = photo;
-
-      const srcSet = breakpoints.map((breakpoint) => {
-        const imageWidth = Math.min(breakpoint, width);
-        const imageHeight = Math.round((height / width) * imageWidth);
-
-        return {
-          src: photo.src,
-          width: imageWidth,
-          height: imageHeight,
-        };
-      });
-
-      return {
-        src,
-        width,
-        height,
-        srcSet,
-      };
-    });
-
-    setSlides((prevSlides) => [...prevSlides, ...slides]);
-  }, [photosList]);
+  };
 
   return (
     <div className="max-w-screen-sm py-2 lg:max-w-screen-xl">
-      {photosList.length === 0 ? (
-        <h1 className="text-center text-white">Loading...</h1>
+      {isFirstLoad ? (
+        <Loading />
       ) : (
         <>
-          <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
-          <FlagDivider />
-          <PhotoAlbum
-            photos={otherPhotos}
-            layout="rows"
-            // columns={(containerWidth) => {
-            //   if (containerWidth < 400) return 2;
-            //   if (containerWidth < 800) return 3;
-            //   return 4;
-            // }}
-            targetRowHeight={300}
-            onClick={({ index }) => setIndex(index)}
-          />
-
-          {hugPhotos.length > 0 && (
+          {photosList.length ? (
             <>
-              <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
+              <div className="flex text-lg text-white lg:text-2xl">
+                <h1>
+                  {/* Total Photos Loaded (Slides Length): {slides.length} | */}
+                  PhotosList Length: {photosList.length}
+                  Index: {index}
+                </h1>
+              </div>
+
+              {photosList.length > 0 && (
+                <>
+                  <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
+                  <FlagDivider />
+                </>
+              )}
+              <PhotoAlbum
+                photos={hugPhotos}
+                layout="masonry"
+                columns={(containerWidth) => {
+                  if (containerWidth < 400) return 2;
+                  if (containerWidth < 800) return 3;
+                  return 4;
+                }}
+                targetRowHeight={300}
+                onClick={({ index }) => setIndex(index)}
+              />
+
+              <h1 className="text-lg text-white lg:text-2xl">
+                Food & Ambiance
+              </h1>
               <FlagDivider />
-            </>
-          )}
-          <PhotoAlbum
-            photos={hugPhotos}
-            layout="masonry"
-            columns={(containerWidth) => {
-              if (containerWidth < 400) return 2;
-              if (containerWidth < 800) return 3;
-              return 4;
-            }}
-            targetRowHeight={300}
-            onClick={({ index }) => setIndex(index)}
-          />
+              <PhotoAlbum
+                photos={foodPhotos}
+                layout="masonry"
+                columns={(containerWidth) => {
+                  if (containerWidth < 400) return 2;
+                  if (containerWidth < 800) return 3;
+                  return 4;
+                }}
+                targetRowHeight={300}
+                onClick={({ index }) => setIndex(hugPhotos?.length + index)}
+              />
 
-          <h1 className="text-lg text-white lg:text-2xl">Food & Ambiance</h1>
-          <FlagDivider />
-          <PhotoAlbum
-            photos={foodPhotos}
-            layout="masonry"
-            columns={(containerWidth) => {
-              if (containerWidth < 400) return 2;
-              if (containerWidth < 800) return 3;
-              return 4;
-            }}
-            targetRowHeight={300}
-            onClick={({ index }) => setIndex(index)}
-          />
+              {photosList.length > 0 && (
+                <>
+                  <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
+                  <FlagDivider />
+                </>
+              )}
 
-          {dancePhotos.length > 0 && (
-            <>
-              <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
+              <PhotoAlbum
+                photos={dancePhotos}
+                layout="masonry"
+                columns={(containerWidth) => {
+                  if (containerWidth < 400) return 2;
+                  if (containerWidth < 800) return 3;
+                  return 4;
+                }}
+                targetRowHeight={300}
+                onClick={({ index }) =>
+                  setIndex(hugPhotos?.length + foodPhotos?.length + index)
+                }
+              />
+
+              <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
               <FlagDivider />
+              <PhotoAlbum
+                photos={otherPhotos}
+                layout="rows"
+                targetRowHeight={300}
+                onClick={({ index }) =>
+                  setIndex(
+                    hugPhotos?.length +
+                      foodPhotos?.length +
+                      dancePhotos?.length +
+                      index
+                  )
+                }
+              />
+
+              {photosList.length > 0 && (
+                <Lightbox
+                  open={index >= 0}
+                  index={index}
+                  close={() => setIndex(-1)}
+                  slides={photosList.sort(
+                    (a, b) =>
+                      Number(b.isHug ?? 0) - Number(a.isHug ?? 0) ||
+                      Number(b.isFood ?? 0) - Number(a.isFood ?? 0) ||
+                      Number(b.isDance ?? 0) - Number(a.isDance ?? 0)
+                  )}
+                  // enable optional lightbox plugins
+                  plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
+                />
+              )}
             </>
-          )}
-
-          <PhotoAlbum
-            photos={dancePhotos}
-            layout="masonry"
-            columns={(containerWidth) => {
-              if (containerWidth < 400) return 2;
-              if (containerWidth < 800) return 3;
-              return 4;
-            }}
-            targetRowHeight={300}
-            onClick={({ index }) => setIndex(index)}
-          />
-
-          {slides.length > 0 && (
-            <Lightbox
-              slides={slides}
-              open={index >= 0}
-              index={index}
-              close={() => setIndex(-1)}
-              // enable optional lightbox plugins
-              plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
-            />
-          )}
+          ) : null}
         </>
       )}
 
-      <div className="flex justify-center text-center text-white">
-        {portionPhotosGCS.length > photosList.length &&
-        portionPhotosGCS.length !== 0 ? (
-          <h1>Scroll Down to Load More Pictures...</h1>
-        ) : null}
-      </div>
+      {isLoading && (
+        <div className={"loading-new-images-container"}>
+          <div className="loading-new-images">Loading New Images ...</div>
+        </div>
+      )}
     </div>
   );
-}
+};
 
-// useEffect(() => {
-//   async function fetchPhotos() {
-//     const photosList = await GetGCSPhotos();
-//     console.log(photosList);
-
-//     const newPhotos = await Promise.all(
-//       photosList.slice(0, 100).map(async (photoName: string) => {
-//         const src = `https://storage.googleapis.com/${
-//           import.meta.env.VITE_GCS_BUCKET_NAME
-//         }/${photoName}`;
-//         console.log(photoName);
-//         const photoData = await identifyPhotos(photoName);
-//         console.log(photoData);
-
-//         const img = new Image();
-//         img.src = src;
-//         try {
-//           await img.decode();
-//           console.log(photoName, img.width, img.height);
-//           return {
-//             src,
-//             width: img.width,
-//             height: img.height,
-//             labels: photoData.labels,
-//             isHug: photoData.isHug,
-//             isDance: photoData.isDance,
-//             person: photoData.person,
-//             isFood: photoData.isFood,
-//           };
-//         } catch (error) {
-//           console.log(`Error decoding ${photoName}: ${error}`);
-//           return null; // or handle the error in some other way
-//         }
-//       })
-//     );
-
-//     const noNullPhotos = newPhotos.filter((image) => image !== null);
-
-//     const hugImages = noNullPhotos.filter((image) => image && image.isHug);
-//     const danceImages = noNullPhotos.filter(
-//       (image) => image && image.isDance
-//     );
-//     const foodImages = noNullPhotos.filter((image) => image && image.isFood);
-//     const otherImages = noNullPhotos.filter(
-//       (image) => !image.isHug && !image.isDance && !image.isFood
-//     );
-//     setHugPhotos(hugImages);
-//     setDancePhotos(danceImages);
-//     setFoodPhotos(foodImages);
-//     setOtherPhotos(otherImages);
-
-//     console.log("hugImages:");
-//     console.log(hugImages);
-//     console.log("danceImages");
-//     console.log(danceImages);
-//     console.log("otherImages:");
-//     console.log(otherImages);
-
-//     const allImages = otherImages.concat(hugImages, foodImages, danceImages);
-//     //need to categorize the photos into different sections
-//     setAllPhotos(allImages);
-//     // setAllPhotos(noNullPhotos);
-//   }
-//   fetchPhotos();
-// }, []);
+export default React.memo(Gallery);
