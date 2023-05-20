@@ -23,7 +23,7 @@ async function getMetadata(fileName) {
   }
 }
 
-//curl -X POST 'http://localhost:8080/?nextQueryPageToken=CgxJTUdfMDQwMi5qcGc=' -H 'Content-Type:application/json'
+//curl -X POST 'http://localhost:8080/?nextQueryPageToken=XXX=' -H 'Content-Type:application/json'
 async function GetGCSPhotoMetadataAndUpdateFirestore() {
   const updateMetadata = async () => {
     const [files] = await storage.bucket(bucketName).getFiles();
