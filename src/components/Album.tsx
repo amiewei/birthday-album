@@ -13,13 +13,12 @@ import Slideshow from "yet-another-react-lightbox/plugins/slideshow";
 import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
 import Zoom from "yet-another-react-lightbox/plugins/zoom";
 import "yet-another-react-lightbox/plugins/thumbnails.css";
-// import { GetGCSPhotos } from "./GCSPhotos";
 import { FlagDivider } from "../utilities/bulgarian-flag-divider";
 import Loading from "./Loading";
 import axios from "axios";
 import uniqid from "uniqid";
 
-const maxResults = 15;
+const maxResults = 25;
 const gcsEndpoint = `${
   import.meta.env.VITE_BACKEND_GETPHOTO_URL
 }?maxResults=${maxResults}&nextQueryPageToken=`;
@@ -31,12 +30,12 @@ const Gallery = () => {
   const [foodPhotos, setFoodPhotos] = useState<Photo[]>([]);
   const [otherPhotos, setOtherPhotos] = useState<Photo[]>([]);
   const [photosList, setPhotosList] = useState<Photo[]>([]); // storing list
-
-  const [isLoading, setIsLoading] = useState(true);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
   const nextQuery = useRef(" ");
+  const isLoading = useRef(true);
+  const isEndOfAlbum = useRef(false);
 
   interface Photo {
     isHug?: boolean;
@@ -47,67 +46,73 @@ const Gallery = () => {
     height: number;
   }
 
-  interface Slide {
-    src: string;
-    width: number;
-    height: number;
-    srcSet?: any;
-    isHug?: boolean;
-    isFood?: boolean;
-    isDance?: boolean;
-  }
-
   const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
 
   async function updatePhotoFormat(photos: any) {
-    console.log("updatePhotoFormat");
-
     const newPhotos = await Promise.all(
       photos.map(async (gcsObject: any) => {
-        const src = `https://storage.googleapis.com/${
-          import.meta.env.VITE_GCS_BUCKET_NAME
-        }/${gcsObject.fileName}`;
+        console.log(gcsObject);
+        if (gcsObject.metadata.labels) {
+          const parsedLabels = JSON.parse(gcsObject.metadata.labels);
+          console.log(parsedLabels);
+        } else {
+          console.log([]);
+        }
+        const src = `https://masterchefgeorgi.com/images/${gcsObject.name}`;
         // console.log(gcsObject.fileName);
+
+        const imageWidth = gcsObject.metadata.imageWidth
+          ? parseInt(gcsObject.metadata.imageWidth)
+          : 4000;
+        const imageHeight = gcsObject.metadata.imageHeight
+          ? parseInt(gcsObject.metadata.imageHeight)
+          : 3000;
 
         //set slide srcSet
         const srcSet = breakpoints.map((breakpoint) => {
-          const imageWidth = Math.min(breakpoint, gcsObject.imageWidth);
-          const imageHeight = Math.round(
-            (gcsObject.imageheight / gcsObject.imageWidth) * imageWidth
-          );
+          const srcSetImageWidth = Math.min(breakpoint, imageWidth);
           return {
             src: src,
-            width: imageWidth,
-            height: imageHeight,
+            width: srcSetImageWidth,
+            height: Math.round((imageHeight / imageWidth) * srcSetImageWidth),
           };
         });
+
         try {
           return {
             key: uniqid(),
             src,
-            width: gcsObject.imageWidth ? parseInt(gcsObject.imageWidth) : 4000,
-            height: gcsObject.imageHeight
-              ? parseInt(gcsObject.imageHeight)
-              : 3000,
-            labels: gcsObject?.labels ? JSON.parse(gcsObject.labels) : [],
-            isHug: gcsObject.isHug && gcsObject.isHug === "true" ? true : false,
+            width: imageWidth,
+            height: imageHeight,
+            labels: gcsObject?.metadata.labels
+              ? JSON.parse(gcsObject.metadata.labels)
+              : [],
+            isHug:
+              gcsObject.metadata.isHug && gcsObject.metadata.isHug === "true"
+                ? true
+                : false,
             isDance:
-              gcsObject.isDance && gcsObject.isDance === "true" ? true : false,
+              gcsObject.metadata.isDance &&
+              gcsObject.metadata.isDance === "true"
+                ? true
+                : false,
             isPerson:
-              gcsObject.isPerson && gcsObject.isPerson === "true"
+              gcsObject.metadata.isPerson &&
+              gcsObject.metadata.isPerson === "true"
                 ? true
                 : false,
             //captures if food or ambiance (no person is in it)
             isFood:
-              (gcsObject.isFood ?? false) &&
-              (gcsObject.isFood === "true" || gcsObject.isPerson === "false")
+              (gcsObject.metadata.isFood ?? false) &&
+              (gcsObject.metadata.isFood === "true" ||
+                gcsObject.metadata.isPerson === "false")
                 ? true
                 : false,
             srcSet,
           };
         } catch (error) {
-          console.log(`Error with ${gcsObject.fileName}: ${error}`);
-          return null; // or handle the error in some other way
+          console.log(`Error with ${gcsObject.name}: ${error}`);
+          return null;
         }
       })
     );
@@ -150,15 +155,14 @@ const Gallery = () => {
       Math.ceil(window.innerHeight + window.scrollY) >=
       document.documentElement.offsetHeight
     ) {
-      console.log(photosList?.length);
-      console.log("isLoading: " + isLoading);
+      console.log("at bottom - to fetch images");
 
-      //first time this doesnt load again. if you adjust code and save, it will run
-      if (photosList?.length < 350 && isLoading === false) {
+      if (isLoading.current === false) {
+        // if (photosList?.length < 350 && isLoading.current === false) {
+        // if (photosList?.length < 350) {
         // setIsLoading(true);
-        console.log("req triggered");
-        console.log("isLoading: " + isLoading);
         console.log(nextQuery.current);
+        console.log("isloading: " + isLoading.current);
         console.log("photolist under 350 images");
         fetchImages();
       }
@@ -167,18 +171,27 @@ const Gallery = () => {
 
   const fetchImages = async () => {
     console.log("fetchImage function");
-    setIsLoading(true);
     try {
+      // setIsLoading(true);
+      isLoading.current = true;
       const response = await axios.get(gcsEndpoint + nextQuery.current);
       const data = response.data;
+      console.log("response data - axios");
+      console.log(response);
+      console.log(data);
+
+      if (!data.lastDocId) {
+        isEndOfAlbum.current = true;
+      }
 
       const updatedFormatPhotos = await updatePhotoFormat(data.data);
       //parse through metadata and assign into different buckets -- use new function
       setPhotosList((photos) => [...photos, ...updatedFormatPhotos]);
 
       setIsFirstLoad(false);
-      setIsLoading(false);
-      nextQuery.current = data.nextQueryPageToken.pageToken;
+      // setIsLoading(false);
+      isLoading.current = false;
+      nextQuery.current = data.lastDocId;
     } catch (e: any) {
       alert("Loading image from GCS bucket failed." + e);
       setError(e);
@@ -193,15 +206,23 @@ const Gallery = () => {
         <>
           {photosList.length ? (
             <>
-              <div className="flex text-lg text-white lg:text-2xl">
-                <h1>
-                  {/* Total Photos Loaded (Slides Length): {slides.length} | */}
-                  PhotosList Length: {photosList.length}
-                  Index: {index}
-                </h1>
-              </div>
+              <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
+              <FlagDivider />
+              <PhotoAlbum
+                photos={otherPhotos}
+                layout="rows"
+                targetRowHeight={300}
+                onClick={({ index }) =>
+                  setIndex(
+                    hugPhotos?.length +
+                      foodPhotos?.length +
+                      dancePhotos?.length +
+                      index
+                  )
+                }
+              />
 
-              {photosList.length > 0 && (
+              {photosList.length > 0 && hugPhotos.length > 0 && (
                 <>
                   <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
                   <FlagDivider />
@@ -219,29 +240,12 @@ const Gallery = () => {
                 onClick={({ index }) => setIndex(index)}
               />
 
-              <h1 className="text-lg text-white lg:text-2xl">
-                Food & Ambiance
-              </h1>
-              <FlagDivider />
-              <PhotoAlbum
-                photos={foodPhotos}
-                layout="masonry"
-                columns={(containerWidth) => {
-                  if (containerWidth < 400) return 2;
-                  if (containerWidth < 800) return 3;
-                  return 4;
-                }}
-                targetRowHeight={300}
-                onClick={({ index }) => setIndex(hugPhotos?.length + index)}
-              />
-
-              {photosList.length > 0 && (
+              {photosList.length > 0 && dancePhotos.length > 0 && (
                 <>
-                  <h1 className="text-lg text-white lg:text-2xl">Dance</h1>
+                  <h1 className="text-lg text-white lg:text-2xl">Dancing</h1>
                   <FlagDivider />
                 </>
               )}
-
               <PhotoAlbum
                 photos={dancePhotos}
                 layout="masonry"
@@ -256,20 +260,24 @@ const Gallery = () => {
                 }
               />
 
-              <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
-              <FlagDivider />
+              {photosList.length > 0 && foodPhotos.length > 0 && (
+                <>
+                  <h1 className="text-lg text-white lg:text-2xl">
+                    Food & Ambiance
+                  </h1>
+                  <FlagDivider />
+                </>
+              )}
               <PhotoAlbum
-                photos={otherPhotos}
-                layout="rows"
+                photos={foodPhotos}
+                layout="masonry"
+                columns={(containerWidth) => {
+                  if (containerWidth < 400) return 2;
+                  if (containerWidth < 800) return 3;
+                  return 4;
+                }}
                 targetRowHeight={300}
-                onClick={({ index }) =>
-                  setIndex(
-                    hugPhotos?.length +
-                      foodPhotos?.length +
-                      dancePhotos?.length +
-                      index
-                  )
-                }
+                onClick={({ index }) => setIndex(hugPhotos?.length + index)}
               />
 
               {photosList.length > 0 && (
@@ -292,11 +300,7 @@ const Gallery = () => {
         </>
       )}
 
-      {isLoading && (
-        <div className={"loading-new-images-container"}>
-          <div className="loading-new-images">Loading New Images ...</div>
-        </div>
-      )}
+      {isLoading && !isEndOfAlbum.current && <Loading />}
     </div>
   );
 };

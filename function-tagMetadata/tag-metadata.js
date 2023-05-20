@@ -1,7 +1,16 @@
+/**
+ * this function will detect once an object is uploaded into gcs, call the vision api to retrieve labels and other metadata
+ * then store the metadata as either
+ * 1) google cloud object metadata
+ * OR
+ * 2) in google cloud firestore
+ */
+
 const functions = require("@google-cloud/functions-framework");
 const vision = require("@google-cloud/vision");
 const { Storage } = require("@google-cloud/storage");
 const sizeOf = require("image-size");
+const Firestore = require("@google-cloud/firestore");
 
 // Creates a client
 const storage = new Storage();
@@ -16,9 +25,6 @@ functions.cloudEvent("detectObjectInGCS", (cloudEvent) => {
   const file = cloudEvent.data;
   console.log(`Bucket: ${file.bucket}`);
   console.log(`File: ${file.name}`);
-  console.log(`Metageneration: ${file.metageneration}`);
-  console.log(`Created: ${file.timeCreated}`);
-  console.log(`Updated: ${file.updated}`);
 
   const resource = file.name;
   const bucketName = file.bucket;
@@ -56,7 +62,6 @@ async function getImageSize(resource, bucketName) {
 async function detectPerson(fileURL) {
   const [result] = await client.objectLocalization(fileURL);
   const objects = result.localizedObjectAnnotations;
-  //   console.log(objects);
   const data = {};
   for (let i = 0; i < objects.length; i++) {
     const object = objects[i];
@@ -71,13 +76,12 @@ async function detectPerson(fileURL) {
       data["isPerson"] = false;
     }
   }
-  //   console.log(data);
+
   return data;
 }
 
 async function detectHug(fileURL) {
   data = {};
-  //   const [result] = await client.labelDetection(fileURL);
   const [result] = await client.annotateImage({
     image: {
       source: {
@@ -91,13 +95,20 @@ async function detectHug(fileURL) {
       },
     ],
   });
-  //   console.log(result);
+
   const labels = result.labelAnnotations;
 
-  data["labels"] = labels.map((label) => label.description);
-  data["isHug"] = data["labels"].includes("Hug");
-  data["isDance"] = data["labels"].includes("Dance");
-  data["isFood"] = data["labels"].includes("Food");
+  //check for partial word matches in labels
+  data["labels"] = labels.map((label) => label.description.toLowerCase());
+  data["isHug"] = data["labels"].some((label) => {
+    return label.includes("hug");
+  });
+  data["isDance"] = data["labels"].some((label) => {
+    return label.includes("dance") || label.includes("performance");
+  });
+  data["isFood"] = data["labels"].some((label) => {
+    return label.includes("food") || label.includes("cuisine");
+  });
 
   return data;
 }
@@ -144,15 +155,17 @@ async function detectPersonAndHug(resource, bucketName) {
   data["imageWidth"] = width;
   data["imageHeight"] = height;
 
-  setFileMetadata(resource, bucketName, data);
+  // setFileMetadata(resource, bucketName, data);
+  setFileMetadataInFirestore(resource, data);
 }
 
+// ------- alternative to store metadata as part of the object in GCS -------------
 async function setFileMetadata(resource, bucketName, metadataToUpdate) {
   // Optional: set a meta-generation-match precondition to avoid potential race
   // conditions and data corruptions. The request to set metadata is aborted if the
   // object's metageneration number does not match your precondition.
 
-  // Set file metadata.
+  // Set file metadata to the object in cloud storage
   const [metadata] = await storage
     .bucket(bucketName)
     .file(resource)
@@ -169,3 +182,40 @@ async function setFileMetadata(resource, bucketName, metadataToUpdate) {
   console.log(metadata);
   console.log("metadata update complete. exiting function");
 }
+
+//-------------------- store metadata in firestore ------------------
+async function setFileMetadataInFirestore(resource, metadataToUpdate) {
+  const db = new Firestore({
+    projectId: "omega-branch-385519",
+    keyFilename: "./function-tagMetadata/sa-firestore.json",
+  });
+
+  const docRef = db.collection("birthday-album-metadata").doc(resource); //resource is file name
+
+  //.set() will completely overwrite. .update() will update difference
+  if (metadataToUpdate && Object.keys(metadataToUpdate).length > 0) {
+    await docRef.set({
+      ...metadataToUpdate,
+    });
+    console.log("Updated metadata for object. Resource/File name: ", resource);
+    console.log(metadataToUpdate);
+    console.log("metadata update complete. exiting function");
+    return metadataToUpdate;
+  }
+}
+
+module.exports = {
+  setFileMetadataInFirestore,
+};
+
+// ---------example data---------------
+// const metadataToUpdate = {
+//   labels: ["architecture", "city", "building", "street", "hug", "food"],
+//   isHug: true,
+//   isDance: false,
+//   isFood: true,
+//   imageWidth: 800,
+//   imageHeight: 1200,
+// };
+
+// setFileMetadataInFirestore("IMG0404.jpg", metadataToUpdate);

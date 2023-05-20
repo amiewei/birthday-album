@@ -16,5 +16,5 @@
     "noEmit": true,
     "jsx": "react-jsx"
   },
-  "include": ["./src"]
+  "include": ["./src", "function-tagMetadata/tag-metadata.js", "function-getGCSPhotos/getGcsPhotos.js"]
 }

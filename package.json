@@ -7,11 +7,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google-cloud/firestore": "^6.5.0",
+    "@google-cloud/functions-framework": "^3.2.0",
     "@google-cloud/storage": "^6.9.5",
     "@google-cloud/vision": "^3.1.2",
     "axios": "^1.3.4",
     "flowbite": "^1.6.4",
     "flowbite-react": "^0.4.3",
+    "image-size": "^1.0.2",
     "jimp": "^0.22.7",
     "react": "^18.2.0",
     "react-confetti": "^6.1.0",
