@@ -5,7 +5,7 @@ export function Home() {
   return (
     <section className="bg-emerald-800 px-4 py-20 dark:bg-gray-900 lg:py-36 lg:pb-2">
       <div className="mx-auto grid min-h-[70vh] px-2 py-4 pb-20 lg:max-w-screen-xl lg:px-8 xl:gap-4">
-        <h1 className="header-text-shadow text-4xl text-white lg:text-8xl ">
+        <h1 className="header-text-shadow text-3xl text-white lg:text-8xl ">
           Честит Рожден ден Кирил{" "}
         </h1>
         <h1 className="text-white lg:text-2xl">

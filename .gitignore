@@ -127,5 +127,6 @@ TODO.md
 **/*copy.tsx
 **/vision-api.js
 **/sa-firestore.json
+*.json
 labeloutput.txt
 utilities/test-images.ts
