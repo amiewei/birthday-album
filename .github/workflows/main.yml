@@ -1,0 +1,29 @@
+name: Copy files to GCS
+on:
+  push:
+    branches: [main]
+
+jobs: 
+  copy-files-gcs:
+    name: Copy directory to GCS
+    runs-on: ubuntu-latest
+
+    # Add "id-token" with the intended permissions.
+    permissions:
+      contents: 'read'
+      id-token: 'write'   
+  
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - id: 'auth'
+      uses: 'google-github-actions/auth@v0'
+      with:
+        credentials_json: '${{ secrets.GCP_CREDENTIALS }}'
+
+    - name: 'Set up Cloud SDK'
+      uses: 'google-github-actions/setup-gcloud@v0'
+
+    - name: 'Use gcloud CLI'
+      run: 'gsutil -m rsync -R -d ./dist gs://birthday-album-frontend'
