@@ -16,6 +16,17 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v3
+      
+    - name: Set up Node.js
+      uses: actions/setup-node@v2
+      with:
+        node-version: '18'
+
+    - name: Install npm dependencies
+      run: npm ci
+
+    - name: Build
+      run: npm run build
 
     - id: 'auth'
       uses: 'google-github-actions/auth@v0'
@@ -26,4 +37,4 @@ jobs:
       uses: 'google-github-actions/setup-gcloud@v0'
 
     - name: 'Use gcloud CLI'
-      run: 'gsutil -m rsync -R -d ./dist gs://birthday-album-frontend'
+      run: 'gsutil -m rsync -R -d ./dist/ gs://birthday-album-frontend'
