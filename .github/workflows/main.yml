@@ -26,6 +26,8 @@ jobs:
       run: npm ci
 
     - name: Build
+      env:
+        VITE_BACKEND_GETPHOTO_URL: ${{ secrets.VITE_BACKEND_GETPHOTO_URL }}
       run: npm run build
 
     - id: 'auth'
