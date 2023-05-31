@@ -6,7 +6,7 @@ const db = new Firestore({
   keyFilename: "./function-tagMetadata/sa-firestore.json",
 });
 
-async function getTopFive() {
+async function getAllLabels() {
   const collectionRef = db.collection("birthday-album-metadata");
 
   // Query for documents that have a 'labels' field
@@ -32,17 +32,26 @@ async function getTopFive() {
     });
   });
 
-  // Sort the labelCount object by the count values in descending order
-  const sortedLabels = Object.keys(labelCount).sort((a, b) => {
-    return labelCount[b] - labelCount[a];
+  // Create an array of label and count pairs as separate lines
+  const labelCountLines = Object.entries(labelCount).map(
+    ([label, count]) => `${label}, ${count}`
+  );
+
+  console.log("Labels and Counts:");
+  console.log(labelCountLines.join("\n"));
+
+  // Sort the labelCountLines array by the count values in descending order
+  labelCountLines.sort((a, b) => {
+    const [, countA] = a.split(", ");
+    const [, countB] = b.split(", ");
+    return countB - countA;
   });
 
-  console.log(sortedLabels);
-  writeToTxtFile(sortedLabels);
+  writeToTxtFile(labelCountLines);
 
   // Take the top 5 labels
-  const topLabels = sortedLabels.slice(0, 5);
-  console.log("Top 5 labels:", topLabels);
+  const topFiveLabelCountPairs = labelCountLines.slice(0, 5);
+  console.log(topFiveLabelCountPairs);
 }
 
 function writeToTxtFile(sortedLabels) {
@@ -55,4 +64,4 @@ function writeToTxtFile(sortedLabels) {
   });
 }
 
-getTopFive();
+getAllLabels();

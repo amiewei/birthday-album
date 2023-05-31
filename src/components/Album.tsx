@@ -48,6 +48,8 @@ const Gallery = () => {
 
   const breakpoints = [3840, 2400, 1080, 640, 384, 256, 128, 96, 64, 48];
 
+  let initialRender = true;
+
   async function updatePhotoFormat(photos: any) {
     const newPhotos = await Promise.all(
       photos.map(async (gcsObject: any) => {
@@ -59,7 +61,6 @@ const Gallery = () => {
           console.log([]);
         }
         const src = `https://masterchefgeorgi.com/images/${gcsObject.name}`;
-        // console.log(gcsObject.fileName);
 
         const imageWidth = gcsObject.metadata.imageWidth
           ? parseInt(gcsObject.metadata.imageWidth)
@@ -143,9 +144,12 @@ const Gallery = () => {
   }
 
   useEffect(() => {
-    console.log("use effect 1 - upon mounting");
-    fetchImages();
-    window.addEventListener("scroll", handleScroll);
+    if (initialRender) {
+      console.log("use effect 1 - upon mounting");
+      initialRender = false;
+      fetchImages();
+      window.addEventListener("scroll", handleScroll);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -158,12 +162,10 @@ const Gallery = () => {
       console.log("at bottom - to fetch images");
 
       if (isLoading.current === false) {
+        // debugger;
         // if (photosList?.length < 350 && isLoading.current === false) {
-        // if (photosList?.length < 350) {
-        // setIsLoading(true);
         console.log(nextQuery.current);
         console.log("isloading: " + isLoading.current);
-        console.log("photolist under 350 images");
         fetchImages();
       }
     }
@@ -200,103 +202,97 @@ const Gallery = () => {
 
   return (
     <div className="max-w-screen-sm py-2 lg:max-w-screen-xl">
-      {isFirstLoad ? (
-        <Loading />
-      ) : (
+      {!isFirstLoad && photosList.length > 0 && (
         <>
-          {photosList.length ? (
+          <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
+          <FlagDivider />
+          <PhotoAlbum
+            photos={otherPhotos}
+            layout="rows"
+            targetRowHeight={300}
+            onClick={({ index }) =>
+              setIndex(
+                hugPhotos?.length +
+                  foodPhotos?.length +
+                  dancePhotos?.length +
+                  index
+              )
+            }
+          />
+
+          {photosList.length > 0 && hugPhotos.length > 0 && (
             <>
-              <h1 className="text-lg text-white lg:text-2xl">Party Pictures</h1>
+              <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
               <FlagDivider />
-              <PhotoAlbum
-                photos={otherPhotos}
-                layout="rows"
-                targetRowHeight={300}
-                onClick={({ index }) =>
-                  setIndex(
-                    hugPhotos?.length +
-                      foodPhotos?.length +
-                      dancePhotos?.length +
-                      index
-                  )
-                }
-              />
-
-              {photosList.length > 0 && hugPhotos.length > 0 && (
-                <>
-                  <h1 className="text-lg text-white lg:text-2xl">Hugs</h1>
-                  <FlagDivider />
-                </>
-              )}
-              <PhotoAlbum
-                photos={hugPhotos}
-                layout="masonry"
-                columns={(containerWidth) => {
-                  if (containerWidth < 400) return 2;
-                  if (containerWidth < 800) return 3;
-                  return 4;
-                }}
-                targetRowHeight={300}
-                onClick={({ index }) => setIndex(index)}
-              />
-
-              {photosList.length > 0 && dancePhotos.length > 0 && (
-                <>
-                  <h1 className="text-lg text-white lg:text-2xl">Dancing</h1>
-                  <FlagDivider />
-                </>
-              )}
-              <PhotoAlbum
-                photos={dancePhotos}
-                layout="masonry"
-                columns={(containerWidth) => {
-                  if (containerWidth < 400) return 2;
-                  if (containerWidth < 800) return 3;
-                  return 4;
-                }}
-                targetRowHeight={300}
-                onClick={({ index }) =>
-                  setIndex(hugPhotos?.length + foodPhotos?.length + index)
-                }
-              />
-
-              {photosList.length > 0 && foodPhotos.length > 0 && (
-                <>
-                  <h1 className="text-lg text-white lg:text-2xl">
-                    Food & Ambiance
-                  </h1>
-                  <FlagDivider />
-                </>
-              )}
-              <PhotoAlbum
-                photos={foodPhotos}
-                layout="masonry"
-                columns={(containerWidth) => {
-                  if (containerWidth < 400) return 2;
-                  if (containerWidth < 800) return 3;
-                  return 4;
-                }}
-                targetRowHeight={300}
-                onClick={({ index }) => setIndex(hugPhotos?.length + index)}
-              />
-
-              {photosList.length > 0 && (
-                <Lightbox
-                  open={index >= 0}
-                  index={index}
-                  close={() => setIndex(-1)}
-                  slides={photosList.sort(
-                    (a, b) =>
-                      Number(b.isHug ?? 0) - Number(a.isHug ?? 0) ||
-                      Number(b.isFood ?? 0) - Number(a.isFood ?? 0) ||
-                      Number(b.isDance ?? 0) - Number(a.isDance ?? 0)
-                  )}
-                  // enable optional lightbox plugins
-                  plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
-                />
-              )}
             </>
-          ) : null}
+          )}
+          <PhotoAlbum
+            photos={hugPhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(index)}
+          />
+
+          {photosList.length > 0 && dancePhotos.length > 0 && (
+            <>
+              <h1 className="text-lg text-white lg:text-2xl">Dancing</h1>
+              <FlagDivider />
+            </>
+          )}
+          <PhotoAlbum
+            photos={dancePhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) =>
+              setIndex(hugPhotos?.length + foodPhotos?.length + index)
+            }
+          />
+
+          {photosList.length > 0 && foodPhotos.length > 0 && (
+            <>
+              <h1 className="text-lg text-white lg:text-2xl">
+                Food & Ambiance
+              </h1>
+              <FlagDivider />
+            </>
+          )}
+          <PhotoAlbum
+            photos={foodPhotos}
+            layout="masonry"
+            columns={(containerWidth) => {
+              if (containerWidth < 400) return 2;
+              if (containerWidth < 800) return 3;
+              return 4;
+            }}
+            targetRowHeight={300}
+            onClick={({ index }) => setIndex(hugPhotos?.length + index)}
+          />
+
+          {photosList.length > 0 && (
+            <Lightbox
+              open={index >= 0}
+              index={index}
+              close={() => setIndex(-1)}
+              slides={photosList.sort(
+                (a, b) =>
+                  Number(b.isHug ?? 0) - Number(a.isHug ?? 0) ||
+                  Number(b.isFood ?? 0) - Number(a.isFood ?? 0) ||
+                  Number(b.isDance ?? 0) - Number(a.isDance ?? 0)
+              )}
+              // enable optional lightbox plugins
+              plugins={[Fullscreen, Slideshow, Thumbnails, Zoom]}
+            />
+          )}
         </>
       )}
 
